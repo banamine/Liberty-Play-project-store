@@ -1,0 +1,6 @@
+{
+  "name": "Liberty Play IPTV Console",
+  "description": "A professional, high-performance IPTV console and HLS media player with M3U playlist parsing, EPG grid, search, categories, favorites, and live streaming controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
