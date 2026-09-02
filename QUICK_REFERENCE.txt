@@ -1,0 +1,117 @@
+================================================================================
+                    LIBERTY PLAY + STREAM VAULT QUICK REFERENCE
+================================================================================
+
+TASK 1: PUSH GIT BUNDLE (2 minutes)
+──────────────────────────────────────────────────────────────────────────────
+Location: Your local machine (GitHub Desktop)
+Commands:
+  git bundle unbundle liberty-play-commits.bundle
+  git fetch origin main && git merge origin/main
+  [Click "Push origin" in GitHub Desktop]
+
+Expected: Commit shows on GitHub, Vercel starts deployment
+
+────────────────────────────────────────────────────────────────────────────
+
+TASK 2: SET VERCEL ENVIRONMENT VARIABLES (2 minutes)
+──────────────────────────────────────────────────────────────────────────────
+URL: https://vercel.com/banamines-projects/liberty-play-project-store/settings/environment-variables
+
+VAR 1:
+  Name:  VITE_STREAM_VAULT_URL
+  Value: https://ais-dev-ddiyfu4ee3sxwwsuqxe7gr-804326557407.us-east1.run.app
+  Scope: ✓ Production  ✓ Preview  ✓ Development
+
+VAR 2:
+  Name:  VITE_ARCHIVE_M3U_URL
+  Value: [See PUSH_AND_DEPLOY_GUIDE.md for 91-URL list]
+  Scope: ✓ Production  ✓ Preview  ✓ Development
+
+Expected: Both variables appear in the list with all 3 scopes checked
+
+────────────────────────────────────────────────────────────────────────────
+
+TASK 3: WAIT FOR DEPLOYMENT (5 minutes)
+──────────────────────────────────────────────────────────────────────────────
+URL: https://vercel.com/banamines-projects/liberty-play-project-store/deployments
+
+Look for: Green checkmark on latest commit
+Expected: Deployment completes within 5 minutes
+
+────────────────────────────────────────────────────────────────────────────
+
+TASK 4: TEST LIVE (5 minutes)
+──────────────────────────────────────────────────────────────────────────────
+URL: https://liberty-play-project-store.vercel.app
+
+TEST 1: Sidebar loads
+  ✓ Shows channel list (not loading spinner)
+  ✓ Real Archive.org channels visible (Columbo, Barnaby Jones, etc.)
+  ✓ No "demo" placeholder content
+
+TEST 2: Click a channel
+  ✓ Channel title updates
+  ✓ HLS stream loads
+  ✓ Video player appears
+
+TEST 3: Browser Console (F12)
+  ✓ Look for: [ArchiveM3U] Processing 91 M3U playlists
+  ✓ Look for: [ArchiveM3U] Summary: XXXX total channels, 0 failed URLs
+  ✓ No red error messages
+
+TEST 4: Playback
+  ✓ Click "Play"
+  ✓ Video starts or shows HLS playback
+  ✓ Controls work
+
+════════════════════════════════════════════════════════════════════════════
+
+IMPORTANT ENDPOINTS
+────────────────────────────────────────────────────────────────────────────
+Stream Vault Health:    https://ais-dev-ddiyfu4ee3sxwwsuqxe7gr-804326557407.us-east1.run.app/health
+Stream Vault M3U Parser: POST https://ais-dev-ddiyfu4ee3sxwwsuqxe7gr-804326557407.us-east1.run.app/api/v1/parse-m3u
+Liberty Play App:       https://liberty-play-project-store.vercel.app
+Vercel Deployments:     https://vercel.com/banamines-projects/liberty-play-project-store/deployments
+Vercel Env Vars:        https://vercel.com/banamines-projects/liberty-play-project-store/settings/environment-variables
+
+════════════════════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────
+Problem: Channels don't load
+  → Check Vercel env vars are set and scoped to all 3 (Production, Preview, Dev)
+  → Check Vercel Runtime Logs for [ArchiveM3U] or error messages
+  → Visit Stream Vault health endpoint to verify it's running
+
+Problem: Some channels fail to load
+  → This is normal — Archive.org may be temporarily down
+  → Other channels will load successfully
+  → Check Vercel logs for which URLs are failing
+
+Problem: Video plays then stops ("Playback Interrupted")
+  → Clear browser cache (Ctrl+Shift+Delete)
+  → Try a different channel
+  → Check browser console for HLS errors
+
+Problem: Deployment still pending after 10 minutes
+  → Refresh Vercel Deployments page
+  → Check if there are build errors in Runtime Logs
+  → Look for type errors or lint violations
+
+════════════════════════════════════════════════════════════════════════════
+
+TIMELINE
+────────────────────────────────────────────────────────────────────────────
+Push code:             2 min (you)
+Set env vars:          2 min (you)
+Vercel builds/deploys: 5 min (automatic)
+Test & verify:         5 min (you)
+────────────────────
+TOTAL:                14 minutes
+
+════════════════════════════════════════════════════════════════════════════
+
+STATUS: ✅ READY TO GO
+Stream Vault is deployed. Orchestrator is committed. You've got everything.
+Just push, configure, and test.
