@@ -1,0 +1,7 @@
+{
+  "env": {
+    "VITE_CLOUD_RUN_URL": "@vite_cloud_run_url",
+    "VITE_ARCHIVE_M3U_URL": "@vite_archive_m3u_url",
+    "VITE_RSS_FEEDS": "@vite_rss_feeds"
+  }
+}

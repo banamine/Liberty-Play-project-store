@@ -1,0 +1,28 @@
+LIBERTY PLAY - CLOUD RUN ONLY (SIMPLIFIED)
+===========================================
+
+STEP 1: Deploy Backend to Google Cloud
+--------------------------------------
+cd server
+npm install
+gcloud run deploy liberty-play-api --source . --region us-east1 --allow-unauthenticated
+
+(Copy the URL it returns)
+
+STEP 2: Update Vercel Environment
+---------------------------------
+Go to Vercel → Settings → Environment Variables
+Add:
+  VITE_CLOUD_RUN_URL = https://liberty-play-api-xxxxx.run.app
+
+STEP 3: Deploy Frontend
+-----------------------
+git push
+(Vercel auto-deploys)
+
+DONE. Your app should now load real Archive.org streams.
+
+Test it:
+--------
+curl https://liberty-play-api-xxxxx.run.app/api/m3u-fetch
+(Should return M3U playlist with real video URLs)
