@@ -1,11 +1,14 @@
 /**
- * AJN Fetch Pipeline Orchestrator
+ * AJN Fetch Pipeline Orchestrator - UPDATED FOR STREAM VAULT M3U PARSER
  *
  * Coordinates parallel fetching from 4 independent sources:
  * 1. Stream Vault skill (direct media URLs)
  * 2. RSS feeds (newsfeeds, episode clips)
  * 3. Archive.org collections (documentary, feature films)
- * 4. Archive.org M3U scraper (movies playlist)
+ * 4. Stream Vault M3U Parser API (Archive.org M3U playlists)
+ *
+ * CRITICAL CHANGE: fetchArchiveM3U() now calls Stream Vault's /api/v1/parse-m3u endpoint
+ * instead of trying to parse locally. This enables real Archive.org channels.
  *
  * Guarantees:
  * - No cascade failures (one source failure doesn't block others)
@@ -69,6 +72,7 @@ export interface OrchestratorConfig {
   rssFeeds?: string[];
   archiveCollectionUrls?: string[];
   m3uPlaylistUrl?: string;
+  streamVaultUrl?: string;  // Stream Vault API base URL (e.g., https://ais-dev-...run.app)
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   enableCaching?: boolean;
@@ -86,7 +90,7 @@ export class AJNFetchPipelineOrchestrator {
   constructor(config: OrchestratorConfig = {}) {
     const envRss = (typeof window !== 'undefined' ? (import.meta as any)?.env?.VITE_RSS_FEEDS : undefined) ||
                    (typeof process !== 'undefined' ? (process.env?.RSS_FEEDS || process.env?.VITE_RSS_FEEDS) : undefined);
-    
+
     const defaultRssFeeds = envRss ? envRss.split(',').map((s: string) => s.trim()) : [
       'https://rss.alexjones.media/',
       'https://rumble.com/feeds/videos.xml?channel=AJNC&sort=new'
@@ -94,6 +98,9 @@ export class AJNFetchPipelineOrchestrator {
 
     const envM3u = (typeof window !== 'undefined' ? (import.meta as any)?.env?.VITE_ARCHIVE_M3U_URL : undefined) ||
                    (typeof process !== 'undefined' ? (process.env?.ARCHIVE_M3U_URL || process.env?.VITE_ARCHIVE_M3U_URL) : undefined);
+
+    const envStreamVaultUrl = (typeof window !== 'undefined' ? (import.meta as any)?.env?.VITE_STREAM_VAULT_URL : undefined) ||
+                              (typeof process !== 'undefined' ? (process.env?.STREAM_VAULT_URL || process.env?.VITE_STREAM_VAULT_URL) : undefined);
 
     this.config = {
       refreshIntervalMs: config.refreshIntervalMs || 30 * 1000,
@@ -106,6 +113,7 @@ export class AJNFetchPipelineOrchestrator {
         'https://archive.org/details/@infobattalion/lists/1/documentary',
       ],
       m3uPlaylistUrl: config.m3uPlaylistUrl || envM3u,
+      streamVaultUrl: config.streamVaultUrl || envStreamVaultUrl || 'https://ais-dev-ddiyfu4ee3sxwwsuqxe7gr-804326557407.us-east1.run.app',
       supabaseUrl: config.supabaseUrl,
       supabaseAnonKey: config.supabaseAnonKey,
       enableCaching: config.enableCaching !== false,
@@ -304,19 +312,111 @@ export class AJNFetchPipelineOrchestrator {
     ];
   }
 
+  /**
+   * UPDATED: Fetch MULTIPLE Archive.org M3U playlists via Stream Vault's M3U parser endpoint
+   *
+   * Accepts a comma-separated list of M3U URLs and fetches each sequentially through
+   * Stream Vault's /api/v1/parse-m3u endpoint. Merges all channels and deduplicates.
+   *
+   * Example config:
+   *   m3uPlaylistUrl: "https://archive.org/download/daily-highlights/1000%20classic%20Music.m3u,https://archive.org/download/daily-highlights/70%20Odd%20Couple.m3u"
+   *
+   * @throws Error if Stream Vault endpoint is unreachable or all URLs fail
+   */
   private async fetchArchiveM3U(): Promise<NormalizedChannel[]> {
     try {
-      const result = await this.m3uAdapter.fetchAndParse();
-      return result.streams.map((stream) => ({
-        id: stream.id,
-        title: stream.tvgName || stream.title,
-        url: stream.url,
-        category: stream.groupTitle || 'Archive.org Movies',
-        logo: stream.tvgLogo,
-        source: 'archive-m3u' as const,
-        fetchedAt: stream.fetchedAt,
-        hash: stream.hash,
-      }));
+      if (!this.config.m3uPlaylistUrl) {
+        console.warn('[ArchiveM3U] No M3U playlist URLs configured, skipping');
+        return [];
+      }
+
+      // Parse comma-separated URLs
+      const m3uUrls = this.config.m3uPlaylistUrl
+        .split(',')
+        .map((url) => url.trim())
+        .filter((url) => url.length > 0);
+
+      if (m3uUrls.length === 0) {
+        console.warn('[ArchiveM3U] No valid M3U URLs found after parsing');
+        return [];
+      }
+
+      console.log(`[ArchiveM3U] Processing ${m3uUrls.length} M3U playlists`);
+
+      const streamVaultEndpoint = `${this.config.streamVaultUrl}/api/v1/parse-m3u`;
+      const allChannels: NormalizedChannel[] = [];
+      const failedUrls: Array<{ url: string; error: string }> = [];
+
+      // Fetch each M3U sequentially to avoid overwhelming the parser
+      for (let i = 0; i < m3uUrls.length; i++) {
+        const m3uUrl = m3uUrls[i];
+        try {
+          console.log(`[ArchiveM3U] [${i + 1}/${m3uUrls.length}] Fetching: ${m3uUrl.substring(0, 80)}...`);
+
+          const response = await fetch(streamVaultEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              m3uUrl,
+            }),
+          });
+
+          if (!response.ok) {
+            const error = `HTTP ${response.status}: ${response.statusText}`;
+            console.warn(`[ArchiveM3U] [${i + 1}/${m3uUrls.length}] Failed: ${error}`);
+            failedUrls.push({ url: m3uUrl, error });
+            continue;
+          }
+
+          const data = await response.json();
+
+          if (!data.success || !data.channels) {
+            const error = `Invalid response: ${data.error || 'Unknown error'}`;
+            console.warn(`[ArchiveM3U] [${i + 1}/${m3uUrls.length}] Invalid response: ${error}`);
+            failedUrls.push({ url: m3uUrl, error });
+            continue;
+          }
+
+          // Convert Stream Vault's channel format to NormalizedChannel
+          const channels = data.channels.map((channel: any) => ({
+            id: channel.id,
+            title: channel.title,
+            url: channel.url,
+            category: channel.category || 'Archive.org',
+            logo: channel.logo,
+            source: 'archive-m3u' as const,
+            fetchedAt: new Date(channel.fetchedAt || Date.now()),
+            hash: this.hashChannel(channel.title, channel.url),
+          }));
+
+          allChannels.push(...channels);
+          console.log(`[ArchiveM3U] [${i + 1}/${m3uUrls.length}] ✅ Parsed ${channels.length} channels`);
+        } catch (err) {
+          const error = (err as Error).message;
+          console.error(`[ArchiveM3U] [${i + 1}/${m3uUrls.length}] Exception: ${error}`);
+          failedUrls.push({ url: m3uUrl, error });
+        }
+      }
+
+      console.log(`[ArchiveM3U] Summary: ${allChannels.length} total channels, ${failedUrls.length} failed URLs`);
+
+      if (failedUrls.length > 0) {
+        console.warn(`[ArchiveM3U] Failed to fetch ${failedUrls.length} playlists:`);
+        failedUrls.slice(0, 5).forEach(({ url, error }) => {
+          console.warn(`  - ${url.substring(0, 60)}... : ${error}`);
+        });
+        if (failedUrls.length > 5) {
+          console.warn(`  ... and ${failedUrls.length - 5} more`);
+        }
+      }
+
+      if (allChannels.length === 0) {
+        throw new Error(`No channels parsed from any M3U playlists (${m3uUrls.length} attempted, all failed)`);
+      }
+
+      return allChannels;
     } catch (err) {
       throw new Error(`ArchiveM3U fetch failed: ${(err as Error).message}`);
     }
